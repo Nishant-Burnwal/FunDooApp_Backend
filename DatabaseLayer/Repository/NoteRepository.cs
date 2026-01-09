@@ -44,7 +44,8 @@ namespace DatabaseLayer.Repository
             return note;
         }
 
-        public bool SoftDeleteNote(int noteId, int userId)
+        // Soft delete
+        public bool MoveToTrash(int noteId, int userId)
         {
             var note = GetNoteById(noteId, userId);
             if (note == null) return false;
@@ -54,6 +55,40 @@ namespace DatabaseLayer.Repository
             _context.SaveChanges();
             return true;
         }
+
+        // Restore from trash
+        public bool RestoreFromTrash(int noteId, int userId)
+        {
+            var note = GetNoteById(noteId, userId);
+            if (note == null) return false;
+
+            note.IsTrash = false;
+            note.UpdatedAt = DateTime.Now;
+            _context.SaveChanges();
+            return true;
+        }
+
+        // Get trashed notes
+        public IEnumerable<Note> GetTrashedNotes(int userId)
+        {
+            return _context.Notes
+                .Where(n => n.UserId == userId && n.IsTrash)
+                .OrderByDescending(n => n.UpdatedAt)
+                .ToList();
+        }
+
+        // Permanent delete
+        public bool PermanentDelete(int noteId, int userId)
+        {
+            var note = GetNoteById(noteId, userId);
+            if (note == null) return false;
+
+            _context.Notes.Remove(note);
+            _context.SaveChanges();
+            return true;
+        }
+
+        // Update pin
         public bool UpdatePin(int noteId, int userId, bool isPin)
         {
             var note = GetNoteById(noteId, userId);
@@ -65,6 +100,7 @@ namespace DatabaseLayer.Repository
             return true;
         }
 
+        //  Update archive
         public bool UpdateArchive(int noteId, int userId, bool isArchive)
         {
             var note = GetNoteById(noteId, userId);
@@ -72,7 +108,7 @@ namespace DatabaseLayer.Repository
 
             note.IsArchive = isArchive;
 
-            // Google Keep rule: archived notes are not pinned
+            // Google Keep rule
             if (isArchive)
                 note.IsPin = false;
 
@@ -80,34 +116,5 @@ namespace DatabaseLayer.Repository
             _context.SaveChanges();
             return true;
         }
-        public IEnumerable<Note> GetTrashedNotes(int userId)
-        {
-            return _context.Notes
-                .Where(n => n.UserId == userId && n.IsTrash)
-                .OrderByDescending(n => n.UpdatedAt)
-                .ToList();
-        }
-
-        public bool RestoreNote(int noteId, int userId)
-        {
-            var note = GetNoteById(noteId, userId);
-            if (note == null) return false;
-
-            note.IsTrash = false;
-            note.UpdatedAt = DateTime.Now;
-            _context.SaveChanges();
-            return true;
-        }
-
-        public bool PermanentDelete(int noteId, int userId)
-        {
-            var note = GetNoteById(noteId, userId);
-            if (note == null) return false;
-
-            _context.Notes.Remove(note);
-            _context.SaveChanges();
-            return true;
-        }
-
     }
 }

@@ -19,54 +19,71 @@ namespace FunDoo.Controllers
             _noteService = noteService;
         }
 
+        // Extract UserId from JWT
         private int GetUserId()
         {
             return int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
         }
 
+        // Create Note
         [HttpPost]
         public IActionResult Create(CreateNoteDTO dto)
         {
             var note = _noteService.CreateNote(dto, GetUserId());
+
             return Ok(new ApiResponse<NoteResponseDTO>
             {
                 Success = true,
-                Message = "Note created",
+                Message = "Note created successfully",
                 Data = note
             });
         }
 
+        // Get all active notes
         [HttpGet]
         public IActionResult GetAll()
         {
             var notes = _noteService.GetAllNotes(GetUserId());
+
             return Ok(new ApiResponse<IEnumerable<NoteResponseDTO>>
             {
                 Success = true,
-                Message = "Notes fetched",
+                Message = "Notes fetched successfully",
                 Data = notes
             });
         }
 
-        [HttpPut("{noteId}")]
+        // Update note
+        [HttpPut("note/{noteId}")]
         public IActionResult Update(int noteId, UpdateNoteDTO dto)
         {
             var note = _noteService.UpdateNote(noteId, dto, GetUserId());
-            if (note == null) return NotFound();
+            if (note == null)
+                return NotFound(new ApiResponse<string>
+                {
+                    Success = false,
+                    Message = "Note not found"
+                });
 
             return Ok(new ApiResponse<NoteResponseDTO>
             {
                 Success = true,
-                Message = "Note updated",
+                Message = "Note updated successfully",
                 Data = note
             });
         }
 
-        [HttpDelete("{noteId}")]
-        public IActionResult Delete(int noteId)
+        // Move note to trash
+        [HttpPut("{noteId}/trash")]
+        public IActionResult MoveToTrash(int noteId)
         {
-            var result = _noteService.DeleteNote(noteId, GetUserId());
-            if (!result) return NotFound();
+            bool result = _noteService.MoveToTrash(noteId, GetUserId());
+            if (!result)
+                return NotFound(new ApiResponse<string>
+                {
+                    Success = false,
+                    Message = "Note not found"
+                });
 
             return Ok(new ApiResponse<string>
             {
@@ -75,60 +92,50 @@ namespace FunDoo.Controllers
             });
         }
 
-        [HttpPatch("{noteId}/pin")]
-        public IActionResult Pin(int noteId, UpdateNoteStateDTO dto)
-        {
-            bool result = _noteService.PinNote(noteId, GetUserId(), dto.Value);
-            if (!result) return NotFound();
-
-            return Ok(new ApiResponse<string>
-            {
-                Success = true,
-                Message = dto.Value ? "Note pinned" : "Note unpinned"
-            });
-        }
-
-        [HttpPatch("{noteId}/archive")]
-        public IActionResult Archive(int noteId, UpdateNoteStateDTO dto)
-        {
-            bool result = _noteService.ArchiveNote(noteId, GetUserId(), dto.Value);
-            if (!result) return NotFound();
-
-            return Ok(new ApiResponse<string>
-            {
-                Success = true,
-                Message = dto.Value ? "Note archived" : "Note unarchived"
-            });
-        }
+        // Get trashed notes
         [HttpGet("trash")]
-        public IActionResult GetTrash()
+        public IActionResult GetTrashedNotes()
         {
             var notes = _noteService.GetTrashedNotes(GetUserId());
 
             return Ok(new ApiResponse<IEnumerable<NoteResponseDTO>>
             {
                 Success = true,
-                Message = "Trashed notes fetched",
+                Message = "Trashed notes fetched successfully",
                 Data = notes
             });
         }
-        [HttpPatch("{noteId}/restore")]
-        public IActionResult Restore(int noteId)
+
+        // Restore note from trash
+        [HttpPut("{noteId}/restore")]
+        public IActionResult RestoreFromTrash(int noteId)
         {
-            bool result = _noteService.RestoreNote(noteId, GetUserId());
-            if (!result) return NotFound();
+            bool result = _noteService.RestoreFromTrash(noteId, GetUserId());
+            if (!result)
+                return NotFound(new ApiResponse<string>
+                {
+                    Success = false,
+                    Message = "Note not found"
+                });
 
             return Ok(new ApiResponse<string>
             {
                 Success = true,
-                Message = "Note restored"
+                Message = "Note restored successfully"
             });
         }
+
+        // Permanent delete
         [HttpDelete("{noteId}/permanent")]
         public IActionResult PermanentDelete(int noteId)
         {
             bool result = _noteService.PermanentDelete(noteId, GetUserId());
-            if (!result) return NotFound();
+            if (!result)
+                return NotFound(new ApiResponse<string>
+                {
+                    Success = false,
+                    Message = "Note not found"
+                });
 
             return Ok(new ApiResponse<string>
             {
@@ -137,5 +144,34 @@ namespace FunDoo.Controllers
             });
         }
 
+        // Pin / Unpin
+        [HttpPatch("{noteId}/pin")]
+        public IActionResult Pin(int noteId, UpdateNoteStateDTO dto)
+        {
+            bool result = _noteService.PinNote(noteId, GetUserId(), dto.Value);
+            if (!result)
+                return NotFound();
+
+            return Ok(new ApiResponse<string>
+            {
+                Success = true,
+                Message = dto.Value ? "Note pinned" : "Note unpinned"
+            });
+        }
+
+        // Archive / Unarchive
+        [HttpPatch("{noteId}/archive")]
+        public IActionResult Archive(int noteId, UpdateNoteStateDTO dto)
+        {
+            bool result = _noteService.ArchiveNote(noteId, GetUserId(), dto.Value);
+            if (!result)
+                return NotFound();
+
+            return Ok(new ApiResponse<string>
+            {
+                Success = true,
+                Message = dto.Value ? "Note archived" : "Note unarchived"
+            });
+        }
     }
 }

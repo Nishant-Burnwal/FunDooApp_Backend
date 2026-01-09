@@ -1,133 +1,138 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
-using DatabaseLayer.Data;
-using BusinessLogicLayer.Interface;
+﻿using BusinessLogicLayer.Interface;
 using BusinessLogicLayer.Service;
+using DatabaseLayer.Data;
 using DatabaseLayer.Interface;
 using DatabaseLayer.Repository;
-using BusinessLogicLayer.Service; // For AddScoped<ITokenService, TokenService>();
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using NLog;
+using NLog.Web;
 using System.Text;
+using StackExchange.Redis;
 
-var builder = WebApplication.CreateBuilder(args);
+var logger = LogManager.Setup()
+    .LoadConfigurationFromFile("nlog.config")
+    .GetCurrentClassLogger();
 
-/*
- *  1. API project = Controllers + Program.cs
-    2. BusinessLogicLayer = Services
-    3. DatabaseLayer = Repositories + DbContext
-    4. ModelLayer = Entities + DTOs
-*/
-
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+try
 {
-    c.SwaggerDoc("v1", new() { Title = "FunDoo API", Version = "v1" });
+    var builder = WebApplication.CreateBuilder(args);
 
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Enter: Bearer <your JWT token>"
-    });
+    // Use NLog
+    builder.Logging.ClearProviders();
+    builder.Host.UseNLog();
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
+    // Controllers
+    builder.Services.AddControllers();
+
+    // DbContext
+    builder.Services.AddDbContext<FunDooContext>(options =>
+        options.UseSqlServer(
+            builder.Configuration.GetConnectionString("DefaultConnection"))
+    );
+
+    // Dependency Injection
+    builder.Services.AddScoped<IUserRepository, UserRepository>();
+    builder.Services.AddScoped<IUserService, UserService>();
+    builder.Services.AddScoped<INoteRepository, NoteRepository>();
+    builder.Services.AddScoped<INoteService, NoteService>();
+    builder.Services.AddScoped<ITokenService, TokenService>();
+    //Labels
+    builder.Services.AddScoped<ILabelRepository, LabelRepository>();
+    builder.Services.AddScoped<ILabelService, LabelService>();
+    // Collaborators
+    builder.Services.AddScoped<ICollaboratorRepository, CollaboratorRepository>();
+    builder.Services.AddScoped<ICollaboratorService, CollaboratorService>();
+
+    builder.Services.AddScoped<IMessagePublisher, RabbitMQPublisher>();
+    builder.Services.AddScoped<ICacheService, RedisCacheService>();
+
+    // JWT Authentication
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            options.TokenValidationParameters = new TokenValidationParameters
             {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] {}
-        }
-    });
-});
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
 
-// Swagger → Controller → Service → Repository → DbContext → SQL Server
-// DbContext
-builder.Services.AddDbContext<FunDooContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    ));
-// User services
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-// Notes Services
-builder.Services.AddScoped<INoteRepository, NoteRepository>();
-builder.Services.AddScoped<INoteService, NoteService>();
+                ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                ValidAudience = builder.Configuration["Jwt:Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            };
+        });
 
+    builder.Services.AddAuthorization();
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    // Swagger + JWT Support
+    builder.Services.AddSwaggerGen(c =>
     {
-        options.TokenValidationParameters = new TokenValidationParameters
+        c.SwaggerDoc("v1", new OpenApiInfo
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
-            )
-        };
+            Title = "FunDoo API",
+            Version = "v1"
+        });
+
+        c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "Bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter: Bearer {JWT token}"
+        });
+
+        c.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
     });
 
-// ADD THIS LINE TO ADD THE  ALL THE CONTROLLERS WE CREATED
-builder.Services.AddControllers();
+    // Register Redis
 
-var app = builder.Build();
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+    ConnectionMultiplexer.Connect(builder.Configuration["Redis:Connection"])
+);
+    var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // Middleware Pipeline
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseHttpsRedirection();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.MapControllers();
+
+    app.Run();
 }
-
-app.UseHttpsRedirection();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-
-// ADD THIS LINE TO MAP THE CONTROLLERS
-app.MapControllers();
-
-var summaries = new[]
+catch (Exception ex)
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
+    logger.Error(ex, "Application stopped due to an exception");
+    throw;
+}
+finally
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
-app.Run();
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    LogManager.Shutdown();
 }

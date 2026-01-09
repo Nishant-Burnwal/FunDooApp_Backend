@@ -11,14 +11,21 @@ namespace BusinessLogicLayer.Service
     public class NoteService : INoteService
     {
         private readonly INoteRepository _noteRepository;
+        private readonly ICacheService _cacheService;
 
-        public NoteService(INoteRepository noteRepository)
+        private string NotesCacheKey(int userId) => $"notes_user_{userId}";
+        private string TrashCacheKey(int userId) => $"notes_user_{userId}_trash";
+
+        public NoteService(INoteRepository noteRepository, ICacheService cacheService)
         {
             _noteRepository = noteRepository;
+            _cacheService = cacheService;
         }
 
         public NoteResponseDTO CreateNote(CreateNoteDTO dto, int userId)
         {
+            _cacheService.Remove(NotesCacheKey(userId));
+
             var note = new Note
             {
                 Title = dto.Title,
@@ -26,11 +33,9 @@ namespace BusinessLogicLayer.Service
                 Reminder = dto.Reminder,
                 Colour = dto.Colour,
                 Image = dto.Image,
-
                 IsPin = false,
                 IsArchive = false,
                 IsTrash = false,
-
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now,
                 UserId = userId
@@ -39,14 +44,26 @@ namespace BusinessLogicLayer.Service
             return Map(_noteRepository.CreateNote(note));
         }
 
-
         public IEnumerable<NoteResponseDTO> GetAllNotes(int userId)
         {
-            return _noteRepository.GetAllNotes(userId).Select(Map);
+            var cacheKey = NotesCacheKey(userId);
+
+            var cached = _cacheService.Get<IEnumerable<NoteResponseDTO>>(cacheKey);
+            if (cached != null)
+                return cached;
+
+            var notes = _noteRepository.GetAllNotes(userId)
+                .Select(Map)
+                .ToList();
+
+            _cacheService.Set(cacheKey, notes, TimeSpan.FromMinutes(5));
+            return notes;
         }
 
         public NoteResponseDTO UpdateNote(int noteId, UpdateNoteDTO dto, int userId)
         {
+            _cacheService.Remove(NotesCacheKey(userId));
+
             var note = _noteRepository.GetNoteById(noteId, userId);
             if (note == null) return null;
 
@@ -59,9 +76,57 @@ namespace BusinessLogicLayer.Service
             return Map(_noteRepository.UpdateNote(note));
         }
 
-        public bool DeleteNote(int noteId, int userId)
+        public bool PinNote(int noteId, int userId, bool value)
         {
-            return _noteRepository.SoftDeleteNote(noteId, userId);
+            _cacheService.Remove(NotesCacheKey(userId));
+            return _noteRepository.UpdatePin(noteId, userId, value);
+        }
+
+        public bool ArchiveNote(int noteId, int userId, bool value)
+        {
+            _cacheService.Remove(NotesCacheKey(userId));
+            return _noteRepository.UpdateArchive(noteId, userId, value);
+        }
+
+        public bool MoveToTrash(int noteId, int userId)
+        {
+            var result = _noteRepository.MoveToTrash(noteId, userId);
+            if (result)
+            {
+                _cacheService.Remove(NotesCacheKey(userId));
+                _cacheService.Remove(TrashCacheKey(userId));
+            }
+            return result;
+        }
+
+        public bool RestoreFromTrash(int noteId, int userId)
+        {
+            _cacheService.Remove(NotesCacheKey(userId));
+            _cacheService.Remove(TrashCacheKey(userId));
+            return _noteRepository.RestoreFromTrash(noteId, userId);
+        }
+
+        public IEnumerable<NoteResponseDTO> GetTrashedNotes(int userId)
+        {
+            var cacheKey = TrashCacheKey(userId);
+
+            var cached = _cacheService.Get<IEnumerable<NoteResponseDTO>>(cacheKey);
+            if (cached != null)
+                return cached;
+
+            var notes = _noteRepository.GetTrashedNotes(userId)
+                .Select(Map)
+                .ToList();
+
+            _cacheService.Set(cacheKey, notes, TimeSpan.FromMinutes(5));
+            return notes;
+        }
+
+        public bool PermanentDelete(int noteId, int userId)
+        {
+            _cacheService.Remove(NotesCacheKey(userId));
+            _cacheService.Remove(TrashCacheKey(userId));
+            return _noteRepository.PermanentDelete(noteId, userId);
         }
 
         private NoteResponseDTO Map(Note note)
@@ -78,30 +143,5 @@ namespace BusinessLogicLayer.Service
                 CreatedAt = note.CreatedAt
             };
         }
-
-        public bool PinNote(int noteId, int userId, bool value)
-        {
-            return _noteRepository.UpdatePin(noteId, userId, value);
-        }
-
-        public bool ArchiveNote(int noteId, int userId, bool value)
-        {
-            return _noteRepository.UpdateArchive(noteId, userId, value);
-        }
-        public IEnumerable<NoteResponseDTO> GetTrashedNotes(int userId)
-        {
-            return _noteRepository.GetTrashedNotes(userId).Select(Map);
-        }
-
-        public bool RestoreNote(int noteId, int userId)
-        {
-            return _noteRepository.RestoreNote(noteId, userId);
-        }
-
-        public bool PermanentDelete(int noteId, int userId)
-        {
-            return _noteRepository.PermanentDelete(noteId, userId);
-        }
-
     }
 }

@@ -16,7 +16,9 @@ namespace ModelLayer.Entity
         public DateTime CreatedAt { get; set; }
         public DateTime ChangedAt { get; set; }
 
-        // Navigation Properties (for later)
         public ICollection<Note> Notes { get; set; }
+        public string? ResetToken { get; set; }
+        public DateTime? ResetTokenExpiry { get; set; }
+
     }
 }

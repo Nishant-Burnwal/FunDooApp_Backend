@@ -15,7 +15,6 @@ namespace ModelLayer.DTOs
         public string Email { get; set; }
 
         [Required]
-        //[RegularExpression("")]
         public string Password { get; set; }
     }
 }

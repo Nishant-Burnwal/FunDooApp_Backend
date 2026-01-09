@@ -49,5 +49,39 @@ namespace DatabaseLayer.Repository
         {
             return _context.Users.FirstOrDefault(u => u.Email == email);
         }
+        public bool SaveResetToken(string email, string token, DateTime expiry)
+        {
+            var user = _context.Users.FirstOrDefault(u => u.Email == email);
+            if (user == null) return false;
+
+            user.ResetToken = token;
+            user.ResetTokenExpiry = expiry;
+            user.ChangedAt = DateTime.Now;
+
+            _context.SaveChanges();
+            return true;
+        }
+
+        public bool UpdatePassword(User user, string newPassword)
+        {
+            user.Password = newPassword;
+            user.ResetToken = null;
+            user.ResetTokenExpiry = null;
+            user.ChangedAt = DateTime.Now;
+
+            _context.SaveChanges();
+            return true;
+        }
+        public User GetUserByResetToken(string token)
+        {
+            return _context.Users.FirstOrDefault(u => u.ResetToken == token);
+        }
+
+        public void UpdateUser(User user)
+        {
+            _context.Users.Update(user);
+            _context.SaveChanges();
+        }
+
     }
 }

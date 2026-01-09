@@ -1,6 +1,8 @@
 <Solution>
   <Project Path="../BusinessLogicLayer/BusinessLogicLayer.csproj" />
   <Project Path="../DatabaseLayer/DatabaseLayer.csproj" />
+  <Project Path="../FunDoo.EmailWorker/FunDoo.EmailWorker.csproj" Id="fe1a2b50-6fd6-44f8-9878-aa5106db478a" />
+  <Project Path="../FunDooApp.Tests/FunDooApp.Tests.csproj" Id="effb1609-238c-4ffa-867a-8311ac74f804" />
   <Project Path="../ModelLayer/ModelLayer.csproj" />
   <Project Path="FunDooApp.csproj" />
 </Solution>

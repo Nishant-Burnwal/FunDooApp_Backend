@@ -1,4 +1,5 @@
 ﻿using ModelLayer.DTOs;
+using ModelLayer.DTOs.User;
 
 namespace BusinessLogicLayer.Interface
 {
@@ -6,5 +7,9 @@ namespace BusinessLogicLayer.Interface
     {
         UserResponseDTO RegisterUser(RegisterUserDTO registerUserDTO);
         LoginResponseDTO Login(LoginUserDTO loginUserDTO);
+
+        // Forgot Password
+        bool ForgotPassword(ForgotPasswordDTO dto);
+        bool ResetPassword(ResetPasswordDTO dto);
     }
 }

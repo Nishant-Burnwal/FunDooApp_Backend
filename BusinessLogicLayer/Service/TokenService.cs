@@ -10,11 +10,11 @@ namespace BusinessLogicLayer.Service
 {
     public class TokenService : ITokenService
     {
-        private readonly IConfiguration _configuration;
+        private readonly IConfiguration _config;
 
-        public TokenService(IConfiguration configuration)
+        public TokenService(IConfiguration config)
         {
-            _configuration = configuration;
+            _config = config;
         }
 
         public string GenerateToken(User user)
@@ -26,14 +26,14 @@ namespace BusinessLogicLayer.Service
             };
 
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_configuration["Jwt:Key"])
+                Encoding.UTF8.GetBytes(_config["Jwt:Key"])
             );
 
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
                 claims: claims,
                 expires: DateTime.Now.AddHours(2),
                 signingCredentials: creds
